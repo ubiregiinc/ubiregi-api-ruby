@@ -1,17 +1,17 @@
 # -*- encoding: utf-8 -*-
 $:.push File.expand_path("../lib", __FILE__)
-require "ubiregi-api-ruby/version"
+require "ubiregi_api/version"
 
 Gem::Specification.new do |s|
-  s.name        = "ubiregi-api-ruby"
-  s.version     = Ubiregi::Api::Ruby::VERSION
+  s.name        = "ubiregi_api_ruby"
+  s.version     = UbiregiAPI::VERSION
   s.authors     = ["Ubiregi Inc."]
   s.email       = ["dev@ubiregi.com"]
   s.homepage    = ""
   s.summary     = %q{TODO: Write a gem summary}
   s.description = %q{TODO: Write a gem description}
 
-  s.rubyforge_project = "ubiregi-api-ruby"
+  s.rubyforge_project = "ubiregi_api_ruby"
 
   s.files         = `git ls-files`.split("\n")
   s.test_files    = `git ls-files -- {test,spec,features}/*`.split("\n")
