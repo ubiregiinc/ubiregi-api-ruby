@@ -1,15 +1,8 @@
-require "httpclient"
-require "json"
-require "pp"
-require "optparse"
-require 'simple_uuid'
-require 'time'
-
 #
 # An implementation of Ubiregi API client, which wraps sending HTTP requests and conversion of requests from/to JSON.
 # The class is developed as an example of the API, it is not recommended to use this in production.
 #
-class UbiregiClient
+class UbiregiAPI::Client
   # 
   # [secret]
   #  The secret to identify which the client app is accessing. The secret is generated in ubiregi.com.
@@ -33,10 +26,14 @@ class UbiregiClient
   # X-Ubiregi-App-Secret is app specific secret, shared with only the ubiregi.com server and the client.
   #
   def default_headers
+    salt = Time.now.strftime("%Y%m%d%H%M%S")
+    digest = Digest::SHA1.hexdigest(salt + @secret)
+    app_secret = salt + ":" + digest
+
     {
       "User-Agent" => "SampleAPI Client; en",
       "X-Ubiregi-Auth-Token" => @token,
-      "X-Ubiregi-App-Secret" => @secret,
+      "X-Ubiregi-App-Secret" => app_secret,
     }
   end
   
@@ -103,8 +100,6 @@ class UbiregiClient
     _post("checkouts", "checkouts" => checkouts)
   end
   
-  private
-
   def _index(url, collection, acc = [], &block)
     response = _get(url)
 
@@ -141,107 +136,3 @@ class UbiregiClient
   end
 end
 
-if __FILE__ == $0
-
-  $ENDPOINT = 'https://ubiregi.com/api/3/'
-
-  OptionParser.new do |opt|
-    opt.on("--secret SECRET") {|secret| $SECRET = secret }
-    opt.on("--token TOKEN") {|token| $TOKEN = token }
-    opt.on("--endpoint ENDPOINT") {|endpoint| $ENDPOINT = endpoint }
-    
-    opt.banner = "Usage: #{$0} [options] command\n" + "   available commands =>  account, menu, all-menu, post-checkout, checkouts"
-    
-    opt.parse!(ARGV)
-  end
-  
-  client = UbiregiClient.new($SECRET, $TOKEN, $ENDPOINT)
-  
-  # Download account information
-  account = client.account
-  # Download menu items information
-  menu_items = client.menu_items(account["menus"].first)
-  # Download menu categories information
-  categories = client.menu_categories(account["menus"].first)
-
-  case ARGV.shift
-  when "account"
-    # Just print account
-    pp account
-    
-  when "menu"
-    # Print valid menus
-    categories.select {|category|
-      # Visible categories have non-null position
-      category['position'] 
-    }.sort {|x,y|
-      # Sort by their position
-      x["position"] <=> y["position"]
-    }.each do |category|
-      # Print the category name
-      puts "#{category['name']}"
-      
-      menu_items.select {|item|
-        # Filter menu items for the category
-        item["category_id"] == category["id"]
-      }.sort {|x,y|
-        # Sort by their position
-        x["position"] <=> y["position"]
-      }.each do |item|
-        # Print the |id|, |name|, |price|, |vat| percentage, and |price_type|
-        puts "  #{item['id']} | #{item['name']} #{item['price']} (#{item['vat']}%, #{item['price_type']})"
-      end
-    end
-    
-  when "all-menu"
-    # Print all menus
-    pp categories
-    pp menu_items
-    
-  when "checkouts"
-    # Print all checkouts
-    checkouts = client.checkouts
-    pp checkouts
-    
-  when 'post-checkout'
-    # Post a checkout
-    
-    payment_types = account["payment_types"]
-    
-    # Select only visible and intax menu items, and create checkout items for the menu items.
-    checkout_items = menu_items.select {|item| item['category_id'] }.select {|item| item['price_type'] == 'intax' }.map do |item|
-      {
-        "menu_item_id" => item['id'],
-        "sales" => (item['price'].to_f * 100 / (100 + item['vat'])).to_i,
-        "tax" => (item['price'].to_f * item['vat'] / (100 + item['vat'])).to_i,
-        'discount_sales' => 0,
-        'discount_tax' => 0,
-        'count' => 1,
-      }
-    end
-    
-    # Calculate the total amount of this bill.
-    amount = checkout_items.inject(0) {|acc, item| acc + item['sales'] + item['tax'] }
-    
-    # Setup how the bill is payed.
-    payments = [{
-                  'payment_type_id' => payment_types.first['id'],
-                  'amount' => amount
-                }]
-    
-    # The complete checkout hash
-    checkout = {
-      'items_attributes' => checkout_items,
-      'change' => 0,
-      'guid' => SimpleUUID::UUID.new.to_guid,
-      'paid_at' => Time.now.utc.iso8601,
-      'payments_attributes' => payments,
-      'customers_count' => 1,
-      'customer_taggings_attributes' => [],
-    }
-    
-    pp client.post_checkouts([checkout])
-    
-  end
-
-end
